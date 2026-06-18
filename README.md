@@ -172,6 +172,12 @@ states the selection decision (a "Good" face over the "Worse" one), as the metho
 The faces are drawn with matplotlib primitives only (ellipses, arcs, line segments) — no extra
 dependency.
 
+![Chernoff faces for three front solutions and one weaker solution](results/chernoff_faces.png)
+
+The three "Good" faces are non-dominated front solutions (short, smiling, level brows); the
+"Worse" face is the weaker random solution (tall, frowning, angry brows, large inward-gazing
+eyes). Per the method, the decision is to pick one of the "Good" faces over "Worse".
+
 ## Reproducibility checks
 
 `experiments/verify.py` prints a small `n = 5` instance and hand-checks the first completion
