@@ -1,43 +1,45 @@
-# Multi-criteria Permutation Flow Shop (m = 3) — Lab 7, Tasks 1–3
+# Multi-criteria Permutation Flow Shop — Optimization & Visualization
 
-Multi-criteria optimization of the permutation flow shop problem with three machines
-(`problemy.pdf`, problem 2.8 / chapter 6). The repository implements **Task 1** (Pareto
-Simulated Annealing + Hypervolume Indicator), **Task 2** (scalarized Simulated Annealing), and
-**Task 3** (visualization with the group's assigned method, Chernoff faces) from `zadania.pdf`.
+A small, dependency-light Python toolkit for multi-criteria optimization of the **permutation
+flow shop** problem with three machines. It provides two simulated-annealing optimizers
+(a Pareto-front search and a scalarized search), a 2D hypervolume indicator for comparing fronts,
+and a Chernoff-faces visualization for inspecting multi-criteria trade-offs. Everything is fully
+deterministic given the seeds, and uses only the standard library plus `matplotlib`.
 
-## Problem
+![Chernoff faces of three Pareto-front solutions and one weaker solution](results/chernoff_faces.png)
 
-`n` jobs are processed on `m = 3` machines in the same job order on every machine (the
-permutation `pi` is the decision variable). `p[i][j]` is the processing time of job `j` on
-machine `i`. Completion times follow the recurrence
+## Problem model
+
+`n` jobs are processed on `m = 3` machines in the same job order on every machine, so a solution
+is a permutation `pi` of the jobs (the decision variable). `p[i][j]` is the processing time of
+job `j` on machine `i`. Completion times follow the recurrence
 
 ```
 C[i][pi[k]] = max(C[i-1][pi[k]], C[i][pi[k-1]]) + p[i][pi[k]]
 ```
 
 with `C[-1][...] = 0` and `C[i][pi[-1]] = 0`. Let `Cm[j] = C[2][j]` be the completion time of
-job `j` on the last machine.
+job `j` on the last machine. Each job has a due date `d[j]` keyed by **input order** (job index
+`j`), not by execution position.
 
-Each job has a due date `d[j]` defined in **input order** (job index `j`), not by execution
-position. The criteria considered (all minimized) are:
+Four minimization criteria are supported:
 
-- **Criterion 2 — Total flowtime**: `SumF = sum_j Cm[j]`
-- **Criterion 3 — Max tardiness**: `Tmax = max_j max(Cm[j] - d[j], 0)`
-- **Criterion 5 — Max lateness**: `Lmax = max_j (Cm[j] - d[j])` (may be negative)
+| criterion | definition |
+|---|---|
+| `SumF` — total flowtime | `sum_j Cm[j]` |
+| `Tmax` — max tardiness | `max_j max(Cm[j] - d[j], 0)` |
+| `Lmax` — max lateness | `max_j (Cm[j] - d[j])` (may be negative) |
+| `SumL` — total lateness | `sum_j (Cm[j] - d[j])` |
 
-Task 1 uses criteria `(2, 3) = (SumF, Tmax)`. Task 2 uses `(2, 3, 5) = (SumF, Tmax, Lmax)`.
-
-Note that `Tmax = max_j max(0, Cm[j] - d[j]) = max(0, max_j (Cm[j] - d[j])) = max(0, Lmax)`.
-So criteria 3 and 5 **coincide exactly whenever at least one job is tardy** (`Lmax >= 0`), and
-they only diverge when every job finishes on time (`Lmax < 0`), where `Tmax` clamps to `0` while
-`Lmax` stays negative. With the tightly-drawn due dates of this generator, `n = 50` random and
-early-search schedules almost always have a tardy job, so `Tmax = Lmax` there; the two separate
-only once the search finds schedules that meet every deadline.
+Tardiness is the non-negative part of lateness, so `Tmax = max(0, Lmax)`: the two coincide
+whenever any job is late and diverge only when every job meets its deadline. For a fixed instance
+`SumL = SumF - sum_j d[j]`, i.e. `SumL` and `SumF` differ by a constant and are perfectly
+rank-correlated.
 
 ## Instance generation
 
-Instances are generated exactly as in §6 of `problemy.pdf`, using only the provided
-`RandomNumberGenerator`. The order of `nextInt` calls is load-bearing for reproducibility:
+Instances are produced with the bundled `RandomNumberGenerator` only. The order of `nextInt`
+calls is fixed and load-bearing for reproducibility:
 
 ```
 init(seed)
@@ -50,27 +52,67 @@ for j in 0..n-1:
     d[j] = nextInt(floor(S/4), floor(S/2))
 ```
 
-`p` is filled **machine-major** (3n calls), then the `n` due dates are drawn. Changing this
-order changes the instance, so it must not be altered.
+Processing times are filled **machine-major** (`3n` draws), then `n` due dates are drawn.
+Two independent generators are used: one seeded for **instance generation** and a separate one
+for **search stochasticity** (initial permutation, neighbor choice, acceptance), so instances
+stay reproducible independently of any search run.
 
-Two independent generator instances are used: one seeded for **instance generation**
-(`generate_instance(seed=...)`) and a separate one for **algorithm stochasticity** (initial
-permutation, neighbor selection, acceptance). This keeps instances reproducible independently
-of the search.
+## Optimizers
+
+### Pareto Simulated Annealing (`pareto_sa`)
+
+Starts from a random permutation, repeatedly draws a random neighbor, accepts it when it
+dominates the current solution and otherwise with probability `p(it)`; every accepted solution is
+archived, and the Pareto front is the non-dominated subset of the archive. The front is returned
+with the underlying permutations so it can be reused downstream.
+
+- Acceptance probability: constant (`p(it) = 0.1`, default) or geometric (`p(it) = 0.995**it`).
+- Neighborhood: `swap` and `insert` moves (default `insert`).
+- Criteria are pluggable via an `evaluate` callback — bi-criteria `(SumF, Tmax)` by default,
+  or the full four for the visualization.
+
+### Scalarized Simulated Annealing (`scalarized_sa`)
+
+Reduces several criteria to a single score `s(x) = c1*SumF + c2*Tmax + c3*Lmax` and runs a
+standard SA on it, tracking the best-seen solution.
+
+Because the criteria live on very different scales (`SumF` is a sum over `n` jobs; `Tmax`/`Lmax`
+are single maxima), the coefficients default to the inverse of each criterion's estimated scale:
+a handful of random permutations are sampled, `scale_i` is the mean of `|criterion_i|` over them,
+and `c_i = 1 / scale_i`, giving every criterion a comparable `~1` contribution. The coefficient
+vector is a parameter, so custom weightings can be supplied without touching the algorithm.
+
+### Hypervolume indicator
+
+`hypervolume_2d` measures the dominated area between a 2D front and a nadir reference point
+(sort by x, sum the staircase rectangles). It is used to compare fronts produced at different
+iteration budgets.
+
+## Visualization — Chernoff faces
+
+`chernoff.py` renders each solution as a face whose features encode the four criteria
+`(SumF, Tmax, Lmax, SumL)`, drawn with matplotlib primitives only:
+
+- `SumF` → face height
+- `Tmax` → mouth curvature (smile vs frown)
+- `Lmax` → eye size and inward pupil gaze
+- `SumL` → eyebrow angle (level vs angry "V")
+
+The nose is a fixed decorative feature. Each criterion is min–max normalized across exactly the
+faces shown together, so smaller (better) criterion values render the "nicer" face (short, round,
+smiling, small forward-looking eyes, level brows). In the image above, the three "Good" faces are
+non-dominated front solutions and the "Worse" face is a weaker random solution.
 
 ## Layout
 
 ```
-src/instance.py        # §6 generation, FlowShopInstance dataclass
-src/schedule.py        # completion matrix + the three criteria
+src/instance.py        # instance generation, FlowShopInstance dataclass
+src/schedule.py        # completion matrix + the four criteria
 src/pareto.py          # dominance, front extraction, 2D HVI
 src/neighborhood.py    # swap / insert moves, random permutation
-src/algorithms.py      # pareto_sa (Task 1), scalarized_sa (Task 2)
+src/algorithms.py      # pareto_sa, scalarized_sa
 src/chernoff.py        # Chernoff faces renderer
-experiments/task1.py            # scatter plots + HVI table
-experiments/task2.py            # s(xbest) table
-experiments/chernoff_faces.py   # Chernoff faces visualization
-experiments/verify.py           # hand-trace + sanity checks
+experiments/           # runnable studies (see below)
 results/               # generated plots and tables
 ```
 
@@ -78,116 +120,28 @@ results/               # generated plots and tables
 
 ```
 pip install -r requirements.txt          # or: uv pip install -r requirements.txt
-python -m experiments.verify             # sanity checks (no dependencies)
-python -m experiments.task1              # plots + HVI table -> results/
-python -m experiments.task2              # s(xbest) table   -> results/
+python -m experiments.verify             # sanity checks (no plotting needed)
+python -m experiments.task1              # Pareto SA: scatter plots + HVI table
+python -m experiments.task2              # Scalarized SA: s(xbest) table + plot
+python -m experiments.chernoff_faces     # Chernoff faces of front vs weaker solution
 ```
 
-Run all commands from the repository root so that the `src` package resolves.
+Run from the repository root so the `src` package resolves. The default instance is
+`n = 50, seed = 1`; all search seeds are derived deterministically inside each script, so reruns
+reproduce identical numbers and figures.
 
-The fixed instance is `n = 50, seed = 1`. Algorithm seeds are derived deterministically per
-run/maxIter inside the experiments, so re-running reproduces identical numbers and plots.
+Outputs land in `results/`:
 
-## Task 1 — Pareto SA + HVI
+- `task1_scatter_<maxIter>.png` — population `P` (blue) with the front `F` highlighted (red).
+- `task1_fronts_combined.png` — fronts for all iteration budgets overlaid.
+- `task1_hvi.csv` — mean hypervolume per iteration budget over 10 runs.
+- `task2_scalar.csv` / `task2_scalar.png` — mean and best `s(xbest)` per iteration budget, plus
+  the raw `(SumF, Tmax, Lmax)` of the best solution.
+- `chernoff_faces.png` — the four faces.
 
-`pareto_sa` follows the pseudocode of §3: start from a random permutation, repeatedly draw a
-random neighbor, accept it if it dominates the current solution, otherwise accept with
-probability `p(it)`; every accepted solution is added to `P`. The Pareto front `F` is extracted
-by removing dominated points from `P`.
+## Verification
 
-- Acceptance probability: constant (`p(it) = 0.1`, default) or geometric (`p(it) = 0.995**it`),
-  selectable via `constant_acceptance` / `geometric_acceptance`.
-- Neighborhood: `swap` and `insert` are both implemented; default is `insert`.
-- `maxIter in [100, 200, 400, 800, 1600]`.
-
-Outputs (in `results/`):
-
-- `task1_scatter_<maxIter>.png` — full set `P` (blue) with front `F` highlighted (red), one per
-  `maxIter` (X = `SumF`, Y = `Tmax`).
-- `task1_fronts_combined.png` — the five fronts overlaid.
-- `task1_hvi.csv` — `maxIter -> mean HVI`, also printed to stdout.
-
-**HVI.** For each run, the nadir point `Z = (z1, z2)` is the worst (largest) criterion-1 and
-criterion-2 value across that run's five fronts, multiplied by `NADIR_FACTOR = 1.1`. The 2D HVI
-is the dominated area between the front and `Z` (sort by x ascending, sum the staircase
-rectangles). Because the search is stochastic, the whole procedure is repeated `RUNS = 10`
-times and the **mean HVI** per `maxIter` is reported (nadir recomputed per run). The plots come
-from one fixed representative run (`run = 0`).
-
-## Task 2 — Scalarized SA
-
-`scalarized_sa` follows §4: the three criteria are reduced to a scalar
-`s(x) = c1*SumF + c2*Tmax + c3*Lmax`. Acceptance/best-tracking follow the pseudocode.
-
-**Scaling decision.** `SumF` is a sum over `n` jobs (order of tens of thousands), while `Tmax`
-and `Lmax` are single maxima (order of hundreds to low thousands). To make the contributions
-comparable, the coefficients are set to the inverse of each criterion's estimated scale:
-`SCALE_SAMPLES = 50` random permutations are drawn (with a dedicated seeded generator),
-`scale_i` is the mean of `|criterion_i|` over those samples (floored at 1.0), and
-`c_i = 1 / scale_i`. This normalizes every criterion to a comparable `~1` range with equal
-weight on the normalized values. The coefficient vector is exposed as the `coefficients`
-parameter of `scalarized_sa`, so it can be overridden (e.g. to study the `c1 = 5*c2` style
-weighting suggested in the lab) without touching the algorithm.
-
-The normalization balances the criteria at the random-sample estimation point (`s ~ 3` for a
-random schedule). After optimization the split is naturally dominated by the `SumF` term offset
-by a negative `Lmax` term: a good schedule meets every deadline (`Tmax -> 0`) with slack, so
-`Lmax` becomes negative and the optimized `s(xbest)` is small and can dip below zero. This is
-expected, not a bug.
-
-Outputs (in `results/`):
-
-- `task2_scalar.csv` — the coefficient vector plus, per `maxIter`, the `mean s(xbest)` over
-  `RUNS = 10` runs, the `best s(xbest)`, and the raw `(SumF, Tmax, Lmax)` of that best `xbest`.
-  Also printed to stdout.
-- `task2_scalar.png` — `mean` and `best` `s(xbest)` plotted against `maxIter` (log2 x-axis).
-
-Lower `s(xbest)` is better; it decreases as `maxIter` grows.
-
-## Task 3 — Chernoff faces (visualization)
-
-The group's single assigned visualization method is **Chernoff faces** (`src/chernoff.py`,
-`experiments/chernoff_faces.py`), so this experiment also fulfils Task 3 of `zadania.pdf` §5. It
-uses the four criteria assigned to the group — **(2, 3, 5, 6) = (SumF, Tmax, Lmax, SumL)**, where
-`SumL = sum_j (Cm[j] - d[j])` is the total lateness (`criteria_four` in `src/schedule.py`).
-
-- **Solutions shown (4, as Task 3 requires):** three solutions are taken from the **final Pareto
-  front of the same algorithm as Task 1** (`pareto_sa`), run on the four criteria via its
-  `evaluate` parameter; if the front has more than three points, three are kept (lowest /
-  middle / highest by criterion vector), and if it has fewer, the missing ones are generated by
-  perturbing a front solution with a few random `insert` moves. The fourth is a deliberately
-  "weaker" random solution (the lab allows a separately generated one).
-- **Which criterion drives which feature** (a free choice, fixed here and stated explicitly):
-  `SumF` → face height, `Tmax` → mouth curvature (smile vs frown), `Lmax` → eye size and
-  inward pupil gaze, `SumL` → eyebrow angle (level vs angry "V"). The nose is a fixed decorative
-  feature. Smaller criterion values render the "nicer" face (short, round, smiling, small
-  forward-looking eyes, level brows).
-- **Normalization to [0, 1]:** per-criterion min–max across exactly the faces shown together
-  (`normalize_columns`), so each column spans the displayed set.
-
-Run it with `python -m experiments.chernoff_faces`; it writes `results/chernoff_faces.png` and
-prints the front size, the feature mapping, and the raw criterion values per face. The final line
-states the selection decision (a "Good" face over the "Worse" one), as the method requires.
-
-The faces are drawn with matplotlib primitives only (ellipses, arcs, line segments) — no extra
-dependency.
-
-![Chernoff faces for three front solutions and one weaker solution](results/chernoff_faces.png)
-
-The three "Good" faces are non-dominated front solutions (short, smiling, level brows); the
-"Worse" face is the weaker random solution (tall, frowning, angry brows, large inward-gazing
-eyes). Per the method, the decision is to pick one of the "Good" faces over "Worse".
-
-## Reproducibility checks
-
-`experiments/verify.py` prints a small `n = 5` instance and hand-checks the first completion
-times against the recurrence, checks dominance and front extraction on a tiny point set,
-checks 2D HVI on the single-point (rectangle) and two-point cases, and confirms that two
-instances generated with the same seed are identical.
-
-## Out of scope
-
-The other six visualization methods from the lab list (bar plots, value paths, dotplots, star
-coordinates, star coordinates with segments, spider charts) are not implemented — they are not
-assigned to this group. Only **Chernoff faces** (the group's assigned method) is provided, which
-together with Tasks 1 and 2 covers Tasks 1–3.
+`experiments/verify.py` hand-checks the completion-time recurrence on a tiny instance, confirms
+that the criteria are keyed by job index (not schedule position), checks dominance and front
+extraction on a small point set, validates the 2D hypervolume on trivial cases, and confirms that
+the same seed reproduces the same instance.
