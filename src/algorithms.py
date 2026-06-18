@@ -85,6 +85,7 @@ def scalarized_sa(
     coefficients: Sequence[float],
     p_accept: Callable[[int], float],
     move: str = "insert",
+    on_step: Optional[Callable[[int, List[int]], None]] = None,
 ) -> ScalarResult:
     score = lambda pi: scalarize(criteria_three(instance, pi), coefficients)
     x = random_permutation(instance.n, rng)
@@ -99,4 +100,6 @@ def scalarized_sa(
             x, sx = x2, sx2
         if sx < best_s:
             best_x, best_s = list(x), sx
+        if on_step is not None:
+            on_step(it + 1, best_x)
     return ScalarResult(permutation=best_x, value=best_s)
