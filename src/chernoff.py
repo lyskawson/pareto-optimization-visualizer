@@ -7,13 +7,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Circle, Ellipse, Polygon
 
 FEATURE_NAMES = [
     "face height (SumF)",
     "mouth curvature (Tmax)",
-    "eye size (Lmax)",
-    "eyebrow slope (SumL)",
+    "eye size and gaze (Lmax)",
+    "eyebrow angle (SumL)",
 ]
 
 
@@ -36,43 +36,54 @@ def _feature(values: Sequence[float], index: int) -> float:
 
 
 def draw_face(ax: Axes, values: Sequence[float], title: str) -> None:
-    face_h = 1.0 + 0.55 * _feature(values, 0)
+    half_h = 0.9 + 0.45 * _feature(values, 0)
+    half_w = 0.9
     ax.add_patch(
-        Ellipse((0.0, 0.0), width=2.0, height=2.0 * face_h, fill=False, lw=2.0)
+        Ellipse((0.0, 0.0), width=2 * half_w, height=2 * half_h, fill=False, lw=2.0)
     )
 
-    eye_r = 0.12 + 0.14 * _feature(values, 2)
-    eye_y = 0.30 * face_h
+    eye_y = 0.32 * half_h
+    eye_x = 0.38
+    eye_r = 0.13 + 0.12 * _feature(values, 2)
+    pupil_dx = 0.5 * eye_r * _feature(values, 2)
     for sign in (-1.0, 1.0):
-        ex = sign * 0.42
+        ex = sign * eye_x
+        ax.add_patch(Circle((ex, eye_y), eye_r, fill=False, lw=1.5))
+        ax.add_patch(Circle((ex - sign * pupil_dx, eye_y), 0.045, color="black"))
+
+    brow_angle = 40.0 * _feature(values, 3)
+    brow_y = eye_y + eye_r + 0.14
+    for sign in (-1.0, 1.0):
         ax.add_patch(
-            Ellipse((ex, eye_y), width=2 * eye_r, height=2 * eye_r, fill=False, lw=1.5)
-        )
-        ax.add_patch(Ellipse((ex, eye_y), width=0.08, height=0.08, color="black"))
-
-    brow_drop = (_feature(values, 3) - 0.5) * 0.35
-    brow_y = eye_y + eye_r + 0.10
-    for sign in (-1.0, 1.0):
-        outer_x = sign * 0.60
-        inner_x = sign * 0.24
-        ax.plot(
-            [outer_x, inner_x],
-            [brow_y, brow_y - brow_drop],
-            color="black",
-            lw=2.0,
+            Ellipse(
+                (sign * eye_x, brow_y),
+                width=0.40,
+                height=0.05,
+                angle=-sign * brow_angle,
+                color="black",
+            )
         )
 
-    nose_y = eye_y - 0.05
-    ax.plot([0.0, 0.0], [nose_y, nose_y - 0.35], color="black", lw=1.5)
+    nose_top = eye_y - 0.02
+    nose_base = eye_y - 0.42
+    ax.add_patch(
+        Polygon(
+            [(0.0, nose_top), (-0.12, nose_base), (0.12, nose_base)],
+            closed=False,
+            fill=False,
+            ec="black",
+            lw=1.5,
+        )
+    )
 
     smile = (0.5 - _feature(values, 1)) * 2.0
-    mouth_y = -0.45 * face_h
-    xs = [(-0.4 + 0.8 * i / 40) for i in range(41)]
-    ys = [mouth_y + 0.25 * smile * (x / 0.4) ** 2 for x in xs]
+    mouth_y = -0.45 * half_h
+    xs = [(-0.34 + 0.68 * i / 40) for i in range(41)]
+    ys = [mouth_y + 0.22 * smile * (x / 0.34) ** 2 for x in xs]
     ax.plot(xs, ys, color="black", lw=2.0)
 
-    ax.set_xlim(-1.4, 1.4)
-    ax.set_ylim(-2.0, 2.0)
+    ax.set_xlim(-1.3, 1.3)
+    ax.set_ylim(-1.7, 1.7)
     ax.set_aspect("equal")
     ax.axis("off")
     ax.set_title(title, fontsize=10)

@@ -158,9 +158,10 @@ uses the four criteria assigned to the group — **(2, 3, 5, 6) = (SumF, Tmax, L
   perturbing a front solution with a few random `insert` moves. The fourth is a deliberately
   "weaker" random solution (the lab allows a separately generated one).
 - **Which criterion drives which feature** (a free choice, fixed here and stated explicitly):
-  `SumF` → face height, `Tmax` → mouth curvature (smile vs frown), `Lmax` → eye size,
-  `SumL` → eyebrow slope (level vs angry). Smaller criterion values render the "nicer" face
-  (short, round, smiling, small eyes, level brows).
+  `SumF` → face height, `Tmax` → mouth curvature (smile vs frown), `Lmax` → eye size and
+  inward pupil gaze, `SumL` → eyebrow angle (level vs angry "V"). The nose is a fixed decorative
+  feature. Smaller criterion values render the "nicer" face (short, round, smiling, small
+  forward-looking eyes, level brows).
 - **Normalization to [0, 1]:** per-criterion min–max across exactly the faces shown together
   (`normalize_columns`), so each column spans the displayed set.
 
