@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import List, Sequence
+import math
+from typing import List, Sequence, Tuple
 
 import matplotlib
 
@@ -15,6 +16,8 @@ FEATURE_NAMES = [
     "eye size and gaze (Lmax)",
     "eyebrow angle (SumL)",
 ]
+
+RADAR_LABELS = ["SumF", "Tmax", "Lmax", "SumL"]
 
 
 def normalize_columns(
@@ -33,6 +36,41 @@ def normalize_columns(
 
 def _feature(values: Sequence[float], index: int) -> float:
     return values[index] if index < len(values) else 0.5
+
+
+def _radar_point(
+    center: Tuple[float, float], radius: float, angle_deg: float, value: float
+) -> Tuple[float, float]:
+    angle = math.radians(angle_deg)
+    return (
+        center[0] + radius * value * math.cos(angle),
+        center[1] + radius * value * math.sin(angle),
+    )
+
+
+def draw_radar(
+    ax: Axes,
+    values: Sequence[float],
+    center: Tuple[float, float],
+    radius: float,
+) -> None:
+    k = len(values)
+    angles = [90.0 - i * 360.0 / k for i in range(k)]
+    for angle, label in zip(angles, RADAR_LABELS):
+        rim = _radar_point(center, radius, angle, 1.0)
+        ax.plot([center[0], rim[0]], [center[1], rim[1]], color="0.8", lw=0.8)
+        text = _radar_point(center, radius * 1.18, angle, 1.0)
+        ax.text(text[0], text[1], label, ha="center", va="center", fontsize=6, color="0.4")
+    ax.add_patch(Circle(center, radius, fill=False, ec="0.85", lw=0.8))
+    points = [
+        _radar_point(center, radius, angle, value)
+        for angle, value in zip(angles, values)
+    ]
+    ax.add_patch(
+        Polygon(points, closed=True, facecolor="tab:blue", alpha=0.25, ec="tab:blue", lw=1.5)
+    )
+    for px, py in points:
+        ax.add_patch(Circle((px, py), 0.03, color="tab:blue"))
 
 
 def draw_face(ax: Axes, values: Sequence[float], title: str) -> None:
@@ -82,8 +120,10 @@ def draw_face(ax: Axes, values: Sequence[float], title: str) -> None:
     ys = [mouth_y + 0.22 * smile * (x / 0.34) ** 2 for x in xs]
     ax.plot(xs, ys, color="black", lw=2.0)
 
+    draw_radar(ax, values, center=(0.0, -2.7), radius=0.85)
+
     ax.set_xlim(-1.3, 1.3)
-    ax.set_ylim(-1.7, 1.7)
+    ax.set_ylim(-3.9, 1.7)
     ax.set_aspect("equal")
     ax.axis("off")
     ax.set_title(title, fontsize=10)
@@ -96,7 +136,7 @@ def draw_faces(
     suptitle: str = "Chernoff faces",
 ) -> None:
     normalized = normalize_columns(solutions)
-    fig, axes = plt.subplots(1, len(solutions), figsize=(3.0 * len(solutions), 4.0))
+    fig, axes = plt.subplots(1, len(solutions), figsize=(3.0 * len(solutions), 6.0))
     if len(solutions) == 1:
         axes = [axes]
     for ax, values, label in zip(axes, normalized, labels):

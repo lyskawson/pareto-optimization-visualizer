@@ -103,6 +103,10 @@ faces shown together, so smaller (better) criterion values render the "nicer" fa
 smiling, small forward-looking eyes, level brows). In the image above, the three "Good" faces are
 non-dominated front solutions and the "Worse" face is a weaker random solution.
 
+Under each face a small **radar (star) plot** repeats the same four normalized criteria on a
+cross of axes. Because `0` maps to the center, a compact polygon means a better solution: the
+"Good" faces collapse toward the center while "Worse" fills a large diamond out to the rim.
+
 ## Layout
 
 ```
