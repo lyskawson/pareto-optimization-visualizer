@@ -107,6 +107,14 @@ Under each face a small **radar (star) plot** repeats the same four normalized c
 cross of axes. Because `0` maps to the center, a compact polygon means a better solution: the
 "Good" faces collapse toward the center while "Worse" fills a large diamond out to the rim.
 
+### Convergence animation
+
+`experiments/chernoff_evolution.py` snapshots `xbest` of a single scalarized-SA run at growing
+iteration counts and renders them as an animated GIF — the face "gets happier" (and its radar
+collapses toward the center) as the search converges.
+
+![Chernoff face of xbest getting happier as the search converges](docs/chernoff_evolution.gif)
+
 ## Layout
 
 ```
@@ -128,6 +136,7 @@ python -m experiments.verify             # sanity checks (no plotting needed)
 python -m experiments.task1              # Pareto SA: scatter plots + HVI table
 python -m experiments.task2              # Scalarized SA: s(xbest) table + plot
 python -m experiments.chernoff_faces     # Chernoff faces of front vs weaker solution
+python -m experiments.chernoff_evolution # animated GIF of xbest converging
 ```
 
 Run from the repository root so the `src` package resolves. The default instance is
@@ -142,6 +151,7 @@ Outputs land in `results/`:
 - `task2_scalar.csv` / `task2_scalar.png` — mean and best `s(xbest)` per iteration budget, plus
   the raw `(SumF, Tmax, Lmax)` of the best solution.
 - `chernoff_faces.png` — the four faces.
+- `chernoff_evolution.gif` — animated convergence of the best face.
 
 ## Verification
 
