@@ -6,7 +6,7 @@ flow shop** problem with three machines. It provides two simulated-annealing opt
 and a Chernoff-faces visualization for inspecting multi-criteria trade-offs. Everything is fully
 deterministic given the seeds, and uses only the standard library plus `matplotlib`.
 
-![Chernoff faces of three Pareto-front solutions and one weaker solution](results/chernoff_faces.png)
+![Chernoff faces of three Pareto-front solutions and one weaker solution](docs/chernoff_faces.png)
 
 ## Problem model
 
