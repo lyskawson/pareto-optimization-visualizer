@@ -37,6 +37,10 @@ def max_lateness(cm: Sequence[int], d: Sequence[int]) -> int:
     return max(cm[j] - d[j] for j in range(len(cm)))
 
 
+def total_lateness(cm: Sequence[int], d: Sequence[int]) -> int:
+    return sum(cm[j] - d[j] for j in range(len(cm)))
+
+
 def criteria_two(instance: FlowShopInstance, pi: Sequence[int]) -> Tuple[int, int]:
     cm = last_machine_completion(instance, pi)
     return total_flowtime(cm), max_tardiness(cm, instance.d)
@@ -50,4 +54,16 @@ def criteria_three(
         total_flowtime(cm),
         max_tardiness(cm, instance.d),
         max_lateness(cm, instance.d),
+    )
+
+
+def criteria_four(
+    instance: FlowShopInstance, pi: Sequence[int]
+) -> Tuple[int, int, int, int]:
+    cm = last_machine_completion(instance, pi)
+    return (
+        total_flowtime(cm),
+        max_tardiness(cm, instance.d),
+        max_lateness(cm, instance.d),
+        total_lateness(cm, instance.d),
     )

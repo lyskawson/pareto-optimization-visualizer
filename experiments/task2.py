@@ -5,6 +5,11 @@ import os
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
 from RandomNumberGenerator import RandomNumberGenerator
 from src.algorithms import constant_acceptance, scalarized_sa
 from src.instance import FlowShopInstance, generate_instance
@@ -81,12 +86,39 @@ def save_table(
             )
 
 
+def save_plot(table: Dict[int, IterRow]) -> None:
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.plot(
+        MAX_ITERS,
+        [table[m].mean_s for m in MAX_ITERS],
+        "o-",
+        label="mean s(xbest)",
+    )
+    ax.plot(
+        MAX_ITERS,
+        [table[m].best_s for m in MAX_ITERS],
+        "s--",
+        label="best s(xbest)",
+    )
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(MAX_ITERS)
+    ax.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+    ax.set_xlabel("maxIter")
+    ax.set_ylabel("s(xbest)")
+    ax.set_title("Scalarized SA: s(xbest) vs maxIter (10 runs)")
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(os.path.join(RESULTS_DIR, "task2_scalar.png"), dpi=120)
+    plt.close(fig)
+
+
 def main() -> None:
     os.makedirs(RESULTS_DIR, exist_ok=True)
     instance = generate_instance(n=50, seed=1)
     coefficients = estimate_coefficients(instance)
     table = run_table(instance, coefficients)
     save_table(table, coefficients)
+    save_plot(table)
     print("Task 2 - scalarized SA over", RUNS, "runs (constant p=0.1, insert move)")
     print(
         "Coefficients (1 / estimated criterion scale): "
@@ -98,7 +130,7 @@ def main() -> None:
         row = table[max_iter]
         raw = f"({row.best_raw[0]}, {row.best_raw[1]}, {row.best_raw[2]})"
         print(f"{max_iter:>8}  {row.mean_s:>12.6f}  {row.best_s:>12.6f}  {raw:>26}")
-    print("\ntask2_scalar.csv saved to results/")
+    print("\ntask2_scalar.csv and task2_scalar.png saved to results/")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, List, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 from RandomNumberGenerator import RandomNumberGenerator
 from src.instance import FlowShopInstance
 from src.neighborhood import random_neighbor, random_permutation
 from src.pareto import Point, dominates, pareto_front
 from src.schedule import criteria_three, criteria_two
+
+Evaluate = Callable[[List[int]], Point]
 
 
 def constant_acceptance(probability: float = 0.1) -> Callable[[int], float]:
@@ -25,6 +27,7 @@ ACCEPTANCE = {"constant": constant_acceptance, "geometric": geometric_acceptance
 class ParetoResult:
     population: List[Point]
     front: List[Point]
+    front_solutions: List[Tuple[List[int], Point]]
 
 
 def pareto_sa(
@@ -33,21 +36,34 @@ def pareto_sa(
     max_iter: int,
     p_accept: Callable[[int], float],
     move: str = "insert",
+    evaluate: Optional[Evaluate] = None,
 ) -> ParetoResult:
-    evaluate = lambda pi: criteria_two(instance, pi)
+    if evaluate is None:
+        evaluate = lambda pi: criteria_two(instance, pi)
     x = random_permutation(instance.n, rng)
     fx = evaluate(x)
-    population: List[Point] = [fx]
+    archive: List[Tuple[List[int], Point]] = [(list(x), fx)]
     for it in range(max_iter):
         x2 = random_neighbor(x, rng, move)
         fx2 = evaluate(x2)
         if dominates(fx2, fx):
             x, fx = x2, fx2
-            population.append(fx2)
+            archive.append((list(x2), fx2))
         elif rng.nextFloat(0.0, 1.0) < p_accept(it):
             x, fx = x2, fx2
-            population.append(fx2)
-    return ParetoResult(population=population, front=pareto_front(population))
+            archive.append((list(x2), fx2))
+    population = [point for _, point in archive]
+    front = pareto_front(population)
+    front_set = set(front)
+    seen: set = set()
+    front_solutions: List[Tuple[List[int], Point]] = []
+    for perm, point in archive:
+        if point in front_set and point not in seen:
+            seen.add(point)
+            front_solutions.append((perm, point))
+    return ParetoResult(
+        population=population, front=front, front_solutions=front_solutions
+    )
 
 
 def scalarize(
